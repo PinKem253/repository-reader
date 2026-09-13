@@ -7,7 +7,11 @@ authors = [
     { name = "PINKEM", email = "129418269+PinKem253@users.noreply.github.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.15.0",
+    "uvicorn>=0.52.4",
+]
 
 [project.scripts]
 repository-reader = "repository_reader:main"
