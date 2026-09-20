@@ -1,9 +1,13 @@
+import logging
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
 import fastapi
 import pydantic 
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
 app = FastAPI()
 
 @app.get("/health")
@@ -38,6 +42,7 @@ class QueryRequest(BaseModel):
 
 @app.post("/repo/{repo_id}")
 async def query_repo(repo_id: int, body: QueryRequest, top_k: int=5):
+    logger.info(f"repo_id={repo_id}, body={body}")
     return {"repo_id": repo_id,
             "body": body,
             "top_k": top_k,
