@@ -6,6 +6,8 @@ import pydantic
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from repository_reader import vector_store, generation, db, ingest
+
 
 logger = logging.getLogger(__name__)
 app = FastAPI()
@@ -40,11 +42,42 @@ async def query_retrieve_id(limit: int):
 class QueryRequest(BaseModel):
     question:str 
 
+# @app.post("/repo/{repo_id}")
+# async def query_repo(repo_id: int, body: QueryRequest, top_k: int=5):
+#     logger.info(f"repo_id={repo_id}, body={body}")
+#     return {"repo_id": repo_id,
+#             "body": body,
+#             "top_k": top_k,
+#             }
+
+
+
 @app.post("/repo/{repo_id}")
-async def query_repo(repo_id: int, body: QueryRequest, top_k: int=5):
+async def query_repo(repo_id: int, body: QueryRequest, top_k: int = 5):
     logger.info(f"repo_id={repo_id}, body={body}")
-    return {"repo_id": repo_id,
-            "body": body,
-            "top_k": top_k,
-            }
+    chunks = vector_store.search_semantic(body.question, repo_id=repo_id, top_k=top_k)
+    answer = generation.generate_answer(body.question, chunks)  
+    return {
+        "repo_id": repo_id,
+        "answer": answer,
+        "citations": [
+            {"file": c["file"], "start_line": c["start_line"], "end_line": c["end_line"]}
+            for c in chunks
+        ],
+    }
+    
+@app.get("/repos")
+async def get_repos():
+    repos = await db.list_repos()
+    return [{"id": r.id, "url": r.url, "status": r.status} for r in repos]
+
+
+class IngestRequest(BaseModel):
+    url: str 
+    
+    
+@app.post("/repos")
+async def create_repo_endpoint(body: IngestRequest):
+    repo_id = await ingest.ingest_repo(body.url)
+    return {"repo_id": repo_id}
 

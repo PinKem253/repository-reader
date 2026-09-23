@@ -8,9 +8,10 @@ class Settings(BaseSettings):
     
     model_config = SettingsConfigDict(
         env_file = '.env'
-    )
+    )                                               
 
 if __name__ == "__main__":
     pass
         
+settings = Settings()
         
