@@ -1,0 +1,7 @@
+{"timestamp": "2026-09-28T04:33:11.899820+00:00", "repo_id": 12, "question": "Repository này là gì, dùng để làm gì?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-09-28T04:33:22.640021+00:00", "repo_id": 12, "question": "File README.md nói gì về mục đích chính của dự án?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-09-28T04:40:09.980646+00:00", "repo_id": 12, "question": "Repository này là gì, dùng để làm gì?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-09-28T04:40:24.147166+00:00", "repo_id": 12, "question": "File README.md nói gì về mục đích chính của dự án?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-09-28T04:41:08.479494+00:00", "repo_id": 12, "question": "Repo này làm gì, dùng license gì, cách cài đặt/dependencies ra sao, có testing framework nào không, và có CI/CD pipeline (vd GitHub Actions) không?", "round_num": 10, "exhausted_budget": true}
+{"timestamp": "2026-09-28T04:41:23.521234+00:00", "repo_id": 12, "question": "Cấu trúc thư mục của dự án như thế nào, và entry point chính để chạy chương trình là gì?", "round_num": 4, "exhausted_budget": false}
+

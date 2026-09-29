@@ -65,11 +65,23 @@ else:
 
             # #2: hiển thị tự nhiên — answer là text sẵn, không cần dump cả object.
             st.subheader("Trả lời")
+
+            # exhausted_budget=True: agent KHÔNG tự kết thúc sớm, câu trả lời
+            # là kết quả của lượt ÉP trả lời sau khi hết vòng loop (xem
+            # agent.py). Không chặn câu trả lời, chỉ cảnh báo nhẹ để người
+            # dùng biết nên kiểm tra kỹ hơn / hỏi cụ thể hơn nếu cần.
+            if data.get("exhausted_budget"):
+                st.warning(
+                    "Câu trả lời này có thể chưa đầy đủ — hệ thống đã thử "
+                    "hết số vòng tìm kiếm cho phép trước khi trả lời. Nếu "
+                    "chưa đúng ý, thử hỏi cụ thể/ngắn gọn hơn."
+                )
+
             st.write(data["answer"])
 
             st.subheader("Nguồn trích dẫn")
-            for c in data["citations"]:
-                st.write(f"- `{c['file']}` (dòng {c['start_line']}–{c['end_line']})")
+            # for c in data["citations"]:
+            #     st.write(f"- `{c['file']}` (dòng {c['start_line']}–{c['end_line']})")
         except Exception:
             logger.exception("Send request failed")
             st.error("Có lỗi khi gọi server — xem log terminal để biết chi tiết.")
