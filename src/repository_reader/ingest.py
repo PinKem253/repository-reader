@@ -1,5 +1,6 @@
 from pathlib import Path 
 from repository_reader import embedding, vector_store, generation, db
+from typing import Optional
 import subprocess
 
 CLONE_BASE_DIR = Path("cloned_repos")
@@ -47,10 +48,47 @@ def clone_repo(url: str, repo_id: int) -> Path:
         check= True,
     )
     return target_dir
+
+
+def get_default_branch(repo_path: Path) -> Optional[str]:
+    """UX citation: lay TEN NHANH THAT SU git da checkout ngay sau
+    clone_repo() -- day CHINH LA nhanh mac dinh cua repo tren GitHub (git
+    clone luon tu dong checkout dung nhanh do). KHONG doan cung "main"
+    hay "master" -- nhieu repo cu tren GitHub van dung "master", doan sai
+    se ra link hong.
+
+    Dung de UI (ui.py) dung xay link truc tiep toi file tren GitHub cho
+    tung citation. Loi o day (vd git khong co san, thu muc khong phai
+    git repo that) CHI lam link khong hien trong UI, KHONG duoc phep lam
+    sap ca luong ingest chinh -- vi vay bat loi, tra None thay vi raise.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", "--abbrev-ref", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip() or None
+    except (subprocess.CalledProcessError, OSError):
+        return None
+
     
-async def ingest_repo(url: str) -> int:
-    repo_id = await db.create_repo(url)
+async def ingest_repo(url: str, owner_id: Optional[int] = None) -> int:
+    # Track 4 muc 1 Part C: nhan them owner_id (tuy chon, mac dinh None
+    # de khong pha loi goi cu tu script/test), truyen thang xuong
+    # db.create_repo() de repo moi duoc gan dung chu tu luc tao.
+    repo_id = await db.create_repo(url, owner_id=owner_id)
     repo_path = clone_repo(url, repo_id)
+
+    # UX citation: luu nhanh mac dinh NGAY sau clone, truoc ca chunk/embed
+    # -- buoc nay re (1 lenh git cuc bo, khong goi API ngoai), va neu
+    # chunk/embed ben duoi that bai (vd all_chunks rong -> status=
+    # "failed") thi default_branch van duoc luu dung, khong bi anh huong.
+    branch = get_default_branch(repo_path)
+    if branch:
+        await db.update_repo_branch(repo_id, branch)
+
     all_chunks = get_all_chunks(repo_path=repo_path)
     
     if not all_chunks:
@@ -69,14 +107,3 @@ async def ingest_repo(url: str) -> int:
 
 if __name__ == "__main__":
     pass
-    
-    
-    
-    
-    
-    
-    
-    
-    
-   
-

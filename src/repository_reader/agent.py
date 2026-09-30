@@ -107,7 +107,16 @@ SYSTEM_INSTRUCTIONS = (
     "hỏi này. Thay vào đó, dùng list_repo_structure (nếu chưa gọi) để biết "
     "tên file cụ thể, rồi đọc THẲNG file nghi ngờ nhất bằng read_file, hoặc "
     "dùng search_exact với từ khóa cụ thể (vd 'config', 'def ', "
-    "'argparse', 'parser.add_argument') thay vì tìm kiếm ngữ nghĩa lần nữa."
+    "'argparse', 'parser.add_argument') thay vì tìm kiếm ngữ nghĩa lần nữa.\n\n"
+    "QUY TẮC RIÊNG cho định dạng trích dẫn [file:start-end]: phần 'file' "
+    "BẮT BUỘC là 1 đường dẫn file THẬT trong repo (lấy nguyên từ citation "
+    "trong observation của search_semantic/search_exact/read_file) — TUYỆT "
+    "ĐỐI KHÔNG được dùng TÊN TOOL (vd 'list_repo_structure', "
+    "'search_semantic') làm 'file'. Output của list_repo_structure là cây "
+    "thư mục, KHÔNG PHẢI 1 file thật nên KHÔNG có gì để trích dẫn theo "
+    "dòng — khi trả lời dựa trên list_repo_structure (vd mô tả tổng quan "
+    "cấu trúc), chỉ mô tả bằng lời, KHÔNG bịa ra 1 citation [file:start-"
+    "end] giả cho phần đó."
 )
 
 # Instruction CHỈ dùng cho lượt "ép trả lời cuối" (xem run(), nhánh hết

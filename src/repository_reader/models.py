@@ -25,6 +25,13 @@ class Repo(SQLModel, table=True):
     # ingest sau khi noi Auth vao app.py (Part D) se luon duoc set
     # owner_id, chi de nullable o tang DB de khong pha du lieu cu.
     owner_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    # UX citation -- Optional vi cung ly do tren: cac repo da ingest TRUOC
+    # khi co field nay se co gia tri NULL cho toi khi duoc ingest lai. Luu
+    # dung TEN NHANH THAT SU git da checkout luc clone (xem
+    # ingest.get_default_branch()) -- KHONG doan "main"/"master", vi nhieu
+    # repo cu tren GitHub van dung "master". Dung de UI (ui.py) dung link
+    # truc tiep toi file tren GitHub cho tung citation.
+    default_branch: Optional[str] = Field(default=None)
 
 
 class Conversation(SQLModel, table=True):

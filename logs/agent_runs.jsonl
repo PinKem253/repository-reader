@@ -5,3 +5,10 @@
 {"timestamp": "2026-09-28T04:41:08.479494+00:00", "repo_id": 12, "question": "Repo này làm gì, dùng license gì, cách cài đặt/dependencies ra sao, có testing framework nào không, và có CI/CD pipeline (vd GitHub Actions) không?", "round_num": 10, "exhausted_budget": true}
 {"timestamp": "2026-09-28T04:41:23.521234+00:00", "repo_id": 12, "question": "Cấu trúc thư mục của dự án như thế nào, và entry point chính để chạy chương trình là gì?", "round_num": 4, "exhausted_budget": false}
 
+{"timestamp": "2026-09-29T07:51:23.500001+00:00", "repo_id": 16, "question": "repo này làm về bài toán gì, các file quan trọng nhất cần biết là gì", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-09-29T07:59:59.624063+00:00", "repo_id": 17, "question": "repo này làm về vấn đề gì, có những file nào là module chính cần quan tâm ", "round_num": 10, "exhausted_budget": true}
+{"timestamp": "2026-09-29T08:21:35.620764+00:00", "repo_id": 17, "question": "what is this repository about, which main core function files I should attent", "round_num": 7, "exhausted_budget": false}
+{"timestamp": "2026-09-29T08:22:52.458635+00:00", "repo_id": 17, "question": "what is this repository about, which main core function files I should attent", "round_num": 10, "exhausted_budget": false}
+{"timestamp": "2026-09-29T08:23:10.627493+00:00", "repo_id": 17, "question": "what is this repository about, which main core function files I should attent", "round_num": 10, "exhausted_budget": false}
+{"timestamp": "2026-09-29T08:25:47.753870+00:00", "repo_id": 18, "question": "what is this repository about, which main core function files I should attent", "round_num": 10, "exhausted_budget": true}
+{"timestamp": "2026-09-30T03:20:58.795064+00:00", "repo_id": 18, "question": "repo này làm về cái gì, nó có những core module nào cần chú ý ?", "round_num": 6, "exhausted_budget": false}
