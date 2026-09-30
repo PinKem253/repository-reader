@@ -232,26 +232,78 @@ if st.sidebar.button("Dang xuat"):
 st.subheader("Thêm repository mới")
 new_repo_url = st.text_input("GitHub URL", key="new_repo_url")
 
+# Track 4 muc 3: luu task_id (KHONG con luu ket qua truc tiep) -- vi gio
+# POST /repos tra ve NGAY task_id, chua co repo_id thuc su (worker rieng
+# chua chay xong ingest). Bat buoc dung st.session_state (khong phai bien
+# Python thuong) vi Streamlit rerun toan bo script moi lan tuong tac (xem
+# giai thich o Track 4 muc 1 Part D, dau file).
+if "ingest_task_id" not in st.session_state:
+    st.session_state.ingest_task_id = None
+
 if st.button("Ingest"):
-    # st.spinner hiện icon xoay + text trong lúc chờ — vì ingest_repo() chạy
-    # đồng bộ/block (chưa có async task queue), request này có thể mất
-    # vài phút (clone + embed), không có spinner UI sẽ trông như bị treo.
-    with st.spinner("Đang ingest repo (clone + embed)... có thể mất vài phút"):
+    # Khong con can st.spinner boc quanh request nay nua -- request gio
+    # CHI serialize tham so + day task vao Redis (broker) roi tra ve NGAY
+    # (tinh bang mili-giay), khong con phai doi clone+chunk+embed (thuong
+    # vai phut) ngay tai day nua.
+    try:
+        response = requests.post(
+            f"{API_BASE}/repos",
+            json={"url": new_repo_url},
+            headers=auth_headers(),
+        )
+        # raise_for_status(): neu response la 4xx/5xx (vd 401 token het han),
+        # ham nay tu raise exception de roi vao except ben duoi.
+        response.raise_for_status()
+        data = response.json()
+        st.session_state.ingest_task_id = data["task_id"]
+        st.rerun()  # rerun ngay de vao nhanh khoi "dang cho" ben duoi, khong can doi tuong tac tiep theo
+    except Exception:
+        logger.exception("Ingest request failed")
+        st.error("Ingest thất bại — xem log terminal FastAPI, hoặc thử đăng xuất/đăng nhập lại nếu phiên đã hết hạn.")
+
+if st.session_state.ingest_task_id:
+    # st.fragment(run_every=...): CHI doan nay cua script duoc chay lai
+    # dinh ky (2 giay/lan) -- KHAC han st.rerun() thu cong (Track 3 muc 7),
+    # vi no khong lam rerun ca trang, chi rerun rieng ham nay. Day la cach
+    # gan voi chuan production nhat ma van kha thi trong kien truc
+    # Streamlit -- chuan production THAT (WebSocket/SSE, server tu day
+    # trang thai ve client) khong lam duoc trong Streamlit.
+    @st.fragment(run_every="2s")
+    def poll_ingest_status():
+        task_id = st.session_state.ingest_task_id
+        if not task_id:
+            return
         try:
-            response = requests.post(
-                f"{API_BASE}/repos",
-                json={"url": new_repo_url},
-                headers=auth_headers(),
-            )
-            # raise_for_status(): nếu response là 4xx/5xx (VD repo 0 file hợp lệ
-            # → 500 từ guard đã thêm ở ingest_repo, hoặc 401 nếu token hết hạn),
-            # hàm này tự raise exception để rơi vào except bên dưới.
+            response = requests.get(f"{API_BASE}/tasks/{task_id}", headers=auth_headers())
             response.raise_for_status()
             data = response.json()
-            st.success(f"Ingest xong — repo_id = {data['repo_id']}")
         except Exception:
-            logger.exception("Ingest request failed")
-            st.error("Ingest thất bại — xem log terminal FastAPI, hoặc thử đăng xuất/đăng nhập lại nếu phiên đã hết hạn.")
+            logger.exception("Poll task status failed")
+            st.error("Không kiểm tra được trạng thái ingest — thử tải lại trang.")
+            return
+
+        task_status = data["status"]
+        if task_status in ("PENDING", "STARTED"):
+            st.info(f"Đang ingest repo (clone + embed)... trạng thái: {task_status}")
+        elif task_status == "SUCCESS":
+            st.success(f"Ingest xong — repo_id = {data['repo_id']}")
+            st.session_state.ingest_task_id = None
+            # scope="app": mac dinh st.rerun() goi TU BEN TRONG 1 fragment
+            # chi rerun rieng fragment do (giu nguyen phan con lai cua
+            # trang khong doi). O day can rerun CA APP: phan "Chon
+            # repository" ben duoi (nam NGOAI fragment nay) can doc lai
+            # GET /repos de thay repo moi vua ready, va chinh cau `if`
+            # bao quanh loi goi fragment nay cung can duoc chay lai de
+            # NGUNG poll tiep (ingest_task_id da ve None).
+            st.rerun(scope="app")
+        elif task_status == "FAILURE":
+            st.error(f"Ingest thất bại: {data.get('error')}")
+            st.session_state.ingest_task_id = None
+            st.rerun(scope="app")
+        else:
+            st.info(f"Trạng thái: {task_status}")
+
+    poll_ingest_status()
 
 st.divider()  # kẻ 1 đường ngang, tách phần "ingest" và phần "hỏi-đáp" bên dưới
 

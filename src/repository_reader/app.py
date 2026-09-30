@@ -22,8 +22,15 @@ import pydantic
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from repository_reader import vector_store, generation, db, ingest, agent, auth
+from repository_reader import vector_store, generation, db, agent, auth
 from repository_reader.models import User
+# Track 4 muc 3: import task (khong phai ingest_repo() truc tiep nua --
+# xem tasks.py) + celery_app (can truyen vao AsyncResult de no biet dung
+# broker/backend nao ma tra cuu) + AsyncResult de tra cuu trang thai task
+# theo task_id.
+from repository_reader.tasks import ingest_task
+from repository_reader.celery_app import celery_app
+from celery.result import AsyncResult
 
 
 logger = logging.getLogger(__name__)
@@ -209,7 +216,39 @@ class IngestRequest(BaseModel):
 
 @app.post("/repos")
 async def create_repo_endpoint(body: IngestRequest, user: User = Depends(get_current_user)):
-    # Track 4 muc 1 Part C: repo moi luon duoc gan owner_id=user.id ngay
-    # tu luc tao, khong con Repo "mo co" khong ai so huu nua.
-    repo_id = await ingest.ingest_repo(body.url, owner_id=user.id)
-    return {"repo_id": repo_id}
+    # Track 4 muc 3: KHONG con await ingest.ingest_repo() truc tiep --
+    # .delay() chi serialize tham so + day vao Redis (message broker) roi
+    # tra ve NGAY 1 AsyncResult chua task_id, KHONG cho ingest chay o day.
+    # Viec ingest that su (clone/chunk/embed) chay o TIEN TRINH WORKER
+    # rieng (xem tasks.py), doc lap hoan toan voi request nay -- request
+    # ket thuc trong mili-giay thay vi phai treo vai phut cho ingest xong.
+    #
+    # Chu y: KHONG con repo_id de tra ve ngay luc nay -- repo (va repo_id
+    # cua no) chi thuc su duoc tao (db.create_repo() ben trong
+    # ingest_repo()) khi WORKER chay task, chua xay ra tai thoi diem nay.
+    task = ingest_task.delay(body.url, user.id)
+    return {"task_id": task.id}
+
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str, user: User = Depends(get_current_user)):
+    """Track 4 muc 3: client (ui.py) goi lap lai endpoint nay (poll) de
+    hoi "task nay toi dau roi" -- thay vi phai giu 1 ket noi HTTP mo lien
+    tuc. AsyncResult tra cuu thang trong Result Backend (Redis) bang
+    task_id, khong can biet gi ve worker nao da/dang chay task do.
+
+    Khong kiem tra task nay co thuoc ve user hien tai khong (task_id la
+    UUID ngau nhien, khong doan duoc, tuong duong 1 "capability token" --
+    du chap nhan duoc cho quy mo portfolio nay; kiem tra chat hon se can
+    luu owner_id cua task o dau do, ngoai pham vi muc nay).
+    """
+    result = AsyncResult(task_id, app=celery_app)
+    response = {"task_id": task_id, "status": result.status}
+    if result.status == "SUCCESS":
+        response["repo_id"] = result.result
+    elif result.status == "FAILURE":
+        # str(result.result): result.result luc FAILURE la chinh exception
+        # object (vd ValueError tu ingest_repo() khi all_chunks rong) --
+        # convert sang string de tra ve duoc qua JSON.
+        response["error"] = str(result.result)
+    return response

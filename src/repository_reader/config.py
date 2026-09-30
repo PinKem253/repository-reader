@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     # cu chua bi lo, giam thiet hai neu token bi ro ri.
     access_token_expire_minutes: int = 1440
 
+    # --- Track 4 muc 3 (Async task queue -- Celery) ---
+    # redis_url: dung LAM CA 2 vai tro -- message broker (hang doi task
+    # giua app.py va celery worker) VA result backend (noi luu trang thai/
+    # ket qua task sau khi worker chay xong). Co default (khac
+    # database_url/jwt_secret_key khong co default) vi Redis local luc dev
+    # luon co dia chi co dinh nay -- khac connection string DB (co password
+    # that) hay secret key (bat buoc random rieng tung nguoi).
+    redis_url: str = "redis://localhost:6379/0"
+
     model_config = SettingsConfigDict(
         env_file = '.env'
     )

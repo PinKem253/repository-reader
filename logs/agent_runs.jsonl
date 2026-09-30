@@ -12,3 +12,6 @@
 {"timestamp": "2026-09-29T08:23:10.627493+00:00", "repo_id": 17, "question": "what is this repository about, which main core function files I should attent", "round_num": 10, "exhausted_budget": false}
 {"timestamp": "2026-09-29T08:25:47.753870+00:00", "repo_id": 18, "question": "what is this repository about, which main core function files I should attent", "round_num": 10, "exhausted_budget": true}
 {"timestamp": "2026-09-30T03:20:58.795064+00:00", "repo_id": 18, "question": "repo này làm về cái gì, nó có những core module nào cần chú ý ?", "round_num": 6, "exhausted_budget": false}
+{"timestamp": "2026-09-30T08:35:59.427824+00:00", "repo_id": 16, "question": "repo này làm về cái gì và có những core module nào ", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-09-30T08:37:01.373769+00:00", "repo_id": 18, "question": "repo này làm về cái gì và có những core module nào ", "round_num": 6, "exhausted_budget": false}
+{"timestamp": "2026-09-30T08:39:58.867167+00:00", "repo_id": 18, "question": "repo này làm về cái gì và có những core module nào ", "round_num": 6, "exhausted_budget": false}
