@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     # that) hay secret key (bat buoc random rieng tung nguoi).
     redis_url: str = "redis://localhost:6379/0"
 
+    # --- Track 4 muc 6 (Observability -- Langfuse tracing + cost tracking) ---
+    # Co default rong "" (KHAC llm_api_key/database_url/jwt_secret_key --
+    # nhung field do khong co default vi la dependency BAT BUOC app moi chay
+    # duoc). Langfuse chi la tool QUAN SAT, khong phai nen tang -- app van
+    # phai chay binh thuong du chua dien key nay. agent.py tu kiem tra 2
+    # field key co rong hay khong de quyet dinh BAT/TAT tracing, khong de
+    # Settings() raise loi luc import nhu jwt_secret_key dang lam.
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+
     model_config = SettingsConfigDict(
         env_file = '.env'
     )

@@ -8,10 +8,6 @@ example.ipynb -- nhưng KHÔNG có thư mục tests/ hay .github/workflows/, nê
 câu multi-part-1 dưới đây sẽ hợp lệ có 2/5 phần trả lời "chưa tìm thấy" --
 đúng là điều muốn test (model phải nói rõ thiếu, không được lờ đi/đoán).
 
-KHÔNG phải unit test theo nghĩa chặt (assert kết quả == giá trị cố định) --
-câu trả lời LLM không có 1 đáp án duy nhất để so khớp tự động. Đây là "eval
-set": chạy qua tests/run_eval.py, đọc kết quả bằng mắt để đánh giá.
-
 Mỗi câu hỏi gắn 1 "category" mô tả nó đang thử hành vi nào của agent loop:
 
 - simple             : câu hỏi cơ bản, ít turns, dùng làm baseline/sanity
@@ -31,6 +27,19 @@ Mỗi câu hỏi gắn 1 "category" mô tả nó đang thử hành vi nào của
                         replay lại đúng bug cũ) -- test quy tắc chống lặp
                         search_semantic có tổng quát hoá được sang tình
                         huống mới, hay chỉ vá đúng 1 case đã thấy.
+
+--- Track 4 mục 4 (Automated testing cho LLM outputs) ---
+
+Mỗi câu hỏi giờ có thêm field "rubric": list[str], mỗi string là 1 tiêu chí
+CỤ THỂ, dùng bởi tests/llm_judge.py (LLM-as-judge) để chấm tự động. "notes"
+giữ nguyên nguyên bản (văn xuôi, cho người đọc hiểu nhanh ý định của câu
+hỏi) -- "rubric" là bản CHUYỂN THỂ của notes sang dạng tiêu chí rời rạc, máy
+chấm được. 2 field không trùng nhau 100% vì mục đích khác nhau: notes có
+thể giải thích BỐI CẢNH (vd repo nào, vì sao hỏi câu này), rubric chỉ chứa
+ĐIỀU KIỆN cần kiểm tra trên chính answer.
+
+KHÔNG phải unit test theo nghĩa chặt (so khớp == giá trị cố định) -- xem
+giải thích đầy đủ về LLM-as-judge + rule cứng ở tests/test_agent_eval.py.
 """
 
 EVAL_QUESTIONS = [
@@ -43,12 +52,23 @@ EVAL_QUESTIONS = [
             "Kỳ vọng: mô tả TabM là model học sâu cho dữ liệu dạng bảng "
             "(ensemble of k models, ICLR 2025)."
         ),
+        "rubric": [
+            "Answer mô tả TabM là 1 model/phương pháp học sâu (deep "
+            "learning) cho dữ liệu dạng bảng (tabular data)",
+            "Answer có nhắc tới ý tưởng ensemble/nhiều submodel (k models) "
+            "hoặc tham chiếu ICLR 2025",
+            "Answer có ít nhất 1 trích dẫn dạng [file:start-end]",
+        ],
     },
     {
         "id": "simple-2",
         "category": "simple",
         "question": "File README.md nói gì về mục đích chính của dự án?",
         "notes": "Đọc thẳng README, không cần search_semantic.",
+        "rubric": [
+            "Answer mô tả đúng mục đích chính của dự án như README.md viết",
+            "Answer có trích dẫn tham chiếu tới README.md",
+        ],
     },
     {
         "id": "multi-part-1",
@@ -64,6 +84,16 @@ EVAL_QUESTIONS = [
             ".github/workflows/ -- 2 phần cuối PHẢI được nói rõ 'chưa tìm "
             "thấy', không được lờ đi hay đoán bừa là 'có pytest' chẳng hạn."
         ),
+        "rubric": [
+            "Có mô tả repo TabM làm gì (model học sâu cho dữ liệu dạng "
+            "bảng)",
+            "Có nhắc tới license của repo (MIT, theo LICENSE file)",
+            "Có đề cập cách cài đặt/dependencies dựa trên pyproject.toml",
+            "Nói RÕ KHÔNG tìm thấy testing framework -- không bịa là có "
+            "pytest/unittest",
+            "Nói RÕ KHÔNG tìm thấy CI/CD pipeline -- không bịa là có "
+            "GitHub Actions",
+        ],
     },
     {
         "id": "multi-part-2",
@@ -79,6 +109,14 @@ EVAL_QUESTIONS = [
             "Xem model có nhận ra và mô tả đúng thay vì bịa 1 entry point "
             "không tồn tại."
         ),
+        "rubric": [
+            "Có mô tả cấu trúc thư mục ở mức hợp lý (dựa trên "
+            "list_repo_structure)",
+            "KHÔNG bịa ra 1 entry point dạng main.py/app chạy trực tiếp mà "
+            "không tồn tại trong repo",
+            "Có nhận ra và mô tả đúng cách dùng thực tế là import tabm.py "
+            "như module, hoặc chạy qua example.ipynb",
+        ],
     },
     {
         "id": "large-file-1",
@@ -93,6 +131,13 @@ EVAL_QUESTIONS = [
             "JSON của notebook (cell markdown mở đầu), không được kết luận "
             "vội chỉ từ đó."
         ),
+        "rubric": [
+            "Answer mô tả được các bước chính THẬT trong notebook (không "
+            "chỉ nói chung chung kiểu 'đây là notebook ví dụ')",
+            "Answer có ít nhất 1 trích dẫn [file:start-end] trỏ tới "
+            "example.ipynb, cho thấy đã đọc sâu hơn phần metadata/markdown "
+            "mở đầu chứ không kết luận vội từ ~100 dòng đầu",
+        ],
     },
     {
         "id": "nonexistent-1",
@@ -105,6 +150,12 @@ EVAL_QUESTIONS = [
             "Repo TabM không có file config.yaml ở gốc. Câu trả lời PHẢI "
             "nói rõ 'chưa tìm thấy', không được đoán tham số bừa."
         ),
+        "rubric": [
+            "Answer nói rõ KHÔNG tìm thấy file config.yaml / không có "
+            "thông tin này trong repo",
+            "Answer KHÔNG tự bịa ra các tham số mặc định cụ thể không có "
+            "trong repo",
+        ],
     },
     {
         "id": "nonexistent-2",
@@ -118,6 +169,12 @@ EVAL_QUESTIONS = [
             "kỳ vọng trả lời trung thực là không có, không lặp tìm kiếm vô "
             "ích."
         ),
+        "rubric": [
+            "Answer nói rõ dự án này KHÔNG kết nối database / không có "
+            "phần này trong repo",
+            "Answer KHÔNG bịa ra tên database hay connection string cụ thể "
+            "không có trong repo",
+        ],
     },
     {
         "id": "adversarial-repeat-1",
@@ -134,5 +191,11 @@ EVAL_QUESTIONS = [
             "search_semantic nhiều lần với query khác nhau (biến thể MỚI "
             "của bug đã vá, không phải replay lại y hệt)."
         ),
+        "rubric": [
+            "Answer mô tả optimizer dựa trên nội dung THẬT tìm được trong "
+            "repo (có trích dẫn), hoặc nói rõ KHÔNG tìm thấy thông tin cụ "
+            "thể -- KHÔNG bịa tên 1 optimizer cụ thể (vd 'Adam') nếu answer "
+            "không trích dẫn được bằng chứng nào cho điều đó",
+        ],
     },
 ]

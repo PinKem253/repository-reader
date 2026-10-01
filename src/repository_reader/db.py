@@ -3,7 +3,7 @@ from repository_reader.config import Settings
 import logging 
 from datetime import datetime
 from sqlmodel.ext.asyncio.session import AsyncSession
-from repository_reader.models import Repo, User
+from repository_reader.models import Repo, User, Conversation
 from sqlmodel import select
 from typing import Optional
 
@@ -114,3 +114,56 @@ async def get_user_by_id(user_id: int) -> Optional[User]:
     user da bi xoa nhung token cu chua het han)."""
     async with AsyncSession(engine) as session:
         return await session.get(User, user_id)
+
+
+# ---------- Track 4 muc 13 (Multi-turn conversation memory) ----------
+
+async def create_conversation_turn(
+    repo_id: int,
+    owner_id: int,
+    question: str,
+    answer: str,
+    conversation_id: Optional[int] = None,
+) -> Conversation:
+    """Luu 1 LUOT hoi-dap. conversation_id=None nghia la luot DAU TIEN cua 1
+    phien moi -- sau khi insert xong (co id that), tu gan nguoc
+    conversation_id = id cua CHINH dong nay (tu tro ve chinh no), de cac luot
+    SAU trong cung phien truyen lai dung conversation_id nay ma gom nhom
+    duoc. Luot thu 2+ (conversation_id da duoc truyen vao tu app.py) thi gan
+    thang, khong can buoc gan nguoc nay."""
+    async with AsyncSession(engine) as session:
+        turn = Conversation(
+            repo_id=repo_id,
+            owner_id=owner_id,
+            question=question,
+            answer=answer,
+            conversation_id=conversation_id,
+            created_at=datetime.utcnow(),
+        )
+        session.add(turn)
+        await session.commit()
+        await session.refresh(turn)
+
+        if turn.conversation_id is None:
+            turn.conversation_id = turn.id
+            session.add(turn)
+            await session.commit()
+            await session.refresh(turn)
+
+        return turn
+
+
+async def get_conversation_turns(conversation_id: int, owner_id: int) -> list[Conversation]:
+    """Lay toan bo cac luot cua 1 phien hoi-dap, theo dung thu tu thoi gian
+    (de agent.py doc lai dung mach hoi-dap cu). Luon kiem tra owner_id --
+    cung nguyen tac chong enumeration da dung cho Repo o get_repo(): 1 user
+    khong duoc doc tiep phien cua nguoi khac bang cach doan conversation_id."""
+    async with AsyncSession(engine) as session:
+        query = (
+            select(Conversation)
+            .where(Conversation.conversation_id == conversation_id)
+            .where(Conversation.owner_id == owner_id)
+            .order_by(Conversation.created_at)
+        )
+        result = await session.exec(query)
+        return result.all()

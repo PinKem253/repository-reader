@@ -1,9 +1,57 @@
-from pathlib import Path 
+from pathlib import Path
 from repository_reader import embedding, vector_store, generation, db
 from typing import Optional
 import subprocess
+import re
 
 CLONE_BASE_DIR = Path("cloned_repos")
+
+# UX hardening (2026-10-01): nguoi dung co the dan URL KEM theo tracking
+# parameter (vd Facebook gan "?fbclid=..." khi share link) hoac dan ca 1
+# doan text co chua link GitHub o giua (markdown link, copy nguyen 1 cau).
+# `git clone` voi URL con nguyen query string se FAIL ("not valid: is this
+# a git repository?") -- bug thuc te da gap.
+#
+# Class ky tu [A-Za-z0-9_.-]+ dung GREEDY (khong can non-greedy/lookahead):
+# day CHINH LA bang ky tu hop le cho username/reponame tren GitHub, nen no
+# tu nhien DUNG LAI dung tai ky tu dau tien KHONG hop le (vd "?", "/", " ",
+# dau xuong dong...) -- tu do tach dung "owner/repo" bat ke phia sau co gi
+# (query string, fragment, subpath /tree/branch, hay van ban khac quanh
+# link). Scheme ("https://")/ "www." deu optional vi URL duoc XAY LAI tu
+# dau o cuoi ham, khong dung nguyen scheme nguoi dung go.
+_GITHUB_URL_RE = re.compile(
+    r"(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)",
+    re.IGNORECASE,
+)
+
+
+def extract_github_url(raw_input: str) -> str:
+    """Tim + lam SACH URL GitHub thuc su tu `raw_input` (co the la URL kem
+    tracking parameter, hoac ca doan text co chua link o dau do). Luon tra
+    ve dung dang "https://github.com/{owner}/{repo}" (khong query string,
+    khong ".git", khong subpath) -- dung LAM MOT cho ca clone_repo() VA cho
+    gia tri luu vao Repo.url (nguon duy nhat ma github_file_url() trong
+    ui.py dung de xay link citation ve sau, nen PHAI sach tu luc nay, khong
+    the de "sach luc clone, ban luc hien thi").
+
+    Raise ValueError (khong raise loi git kho hieu tu sau) neu KHONG tim
+    thay pattern "github.com/owner/repo" nao trong raw_input -- de app.py
+    tra 400 ro rang ngay, khong de loi sap sau toi tan luc Celery worker
+    chay git clone (nguoi dung se chi thay "FAILURE" mo ho qua polling).
+    """
+    match = _GITHUB_URL_RE.search(raw_input.strip())
+    if match is None:
+        raise ValueError(
+            "Không tìm thấy link GitHub hợp lệ trong nội dung đã nhập "
+            '(cần dạng "github.com/<owner>/<repo>").'
+        )
+    owner, repo = match.group(1), match.group(2)
+    # 1 so repo co ".git" di kem truoc day la query/subpath (vd
+    # "repo.git/tree/main") -- char class cua repo da cho phep "." nen
+    # ".git" co the bi nuot vao group 2, can cat rieng cho sach.
+    if repo.endswith(".git"):
+        repo = repo[: -len(".git")]
+    return f"https://github.com/{owner}/{repo}"
 
 VALID_EXT = {".py", ".md", ".rst"}
 EXCLUDE = {"tests", ".git", "__pycache__"}

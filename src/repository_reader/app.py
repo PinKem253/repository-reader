@@ -18,11 +18,12 @@ for _noisy_logger in ("httpx", "httpcore", "urllib3", "huggingface_hub", "FlagEm
 import asyncio
 import fastapi
 import pydantic
+from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from repository_reader import vector_store, generation, db, agent, auth
+from repository_reader import vector_store, generation, db, agent, auth, ingest
 from repository_reader.models import User
 # Track 4 muc 3: import task (khong phai ingest_repo() truc tiep nua --
 # xem tasks.py) + celery_app (can truyen vao AsyncResult de no biet dung
@@ -147,7 +148,11 @@ async def query_retrieve_id(limit: int):
     return {"limit": limit}
 
 class QueryRequest(BaseModel):
-    question:str
+    question: str
+    # Track 4 muc 13 (multi-turn memory): None = cau hoi doc lap, giu nguyen
+    # hanh vi cu. Co gia tri = tiep tuc 1 phien hoi-dap da co (client -- ui.py
+    # -- tu luu lai conversation_id tra ve tu lan goi truoc).
+    conversation_id: Optional[int] = None
 
 # @app.post("/repo/{repo_id}")
 # async def query_repo(repo_id: int, body: QueryRequest, top_k: int=5):
@@ -183,16 +188,45 @@ async def query_repo(repo_id: int, body: QueryRequest, user: User = Depends(get_
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repo khong ton tai",
         )
+
+    # Track 4 muc 13: neu client gui conversation_id (tiep tuc 1 phien hoi-
+    # dap da co), lay lai cac luot TRUOC cua CHINH phien do de agent.run()
+    # "nho" ngu canh -- luon kem owner_id khi tra cuu (cung nguyen tac 404
+    # enumeration-safety o tren: khong cho doan conversation_id de doc phien
+    # cua nguoi khac).
+    prior_turns = None
+    if body.conversation_id is not None:
+        prior_turns = await db.get_conversation_turns(body.conversation_id, owner_id=user.id)
+        if not prior_turns:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cuoc tro chuyen khong ton tai",
+            )
+
     logger.info(f"repo_id={repo_id}, body={body}")
     # agent.run() gio tra ve dict {"answer": ..., "exhausted_budget": ...}
     # thay vi str thuan -- "exhausted_budget" la metadata tach rieng khoi
     # noi dung answer, de client (UI Streamlit / Swagger debug) tu quyet
     # dinh cach hien thi, thay vi nhet canh bao vao ngay trong answer.
-    result = await asyncio.to_thread(agent.run, body.question, repo_id)
+    result = await asyncio.to_thread(agent.run, body.question, repo_id, prior_turns)
+
+    # Luu lai LUOT nay (Track 4 muc 13) -- conversation_id=None (luot dau
+    # tien cua 1 phien moi) khien db.create_conversation_turn() tu gan
+    # nguoc conversation_id = id cua chinh dong nay; client nhan gia tri nay
+    # ve de gui lai cho luot ke tiep.
+    turn = await db.create_conversation_turn(
+        repo_id=repo_id,
+        owner_id=user.id,
+        question=body.question,
+        answer=result["answer"],
+        conversation_id=body.conversation_id,
+    )
+
     return {
         "repo_id": repo_id,
         "answer": result["answer"],
         "exhausted_budget": result["exhausted_budget"],
+        "conversation_id": turn.conversation_id,
     }
 
 @app.get("/repos")
@@ -226,7 +260,21 @@ async def create_repo_endpoint(body: IngestRequest, user: User = Depends(get_cur
     # Chu y: KHONG con repo_id de tra ve ngay luc nay -- repo (va repo_id
     # cua no) chi thuc su duoc tao (db.create_repo() ben trong
     # ingest_repo()) khi WORKER chay task, chua xay ra tai thoi diem nay.
-    task = ingest_task.delay(body.url, user.id)
+    #
+    # UX hardening (2026-10-01): lam SACH url NGAY TAI DAY (truoc khi dua
+    # vao Celery) -- vi 2 ly do: (1) tra 400 NGAY LAP TUC cho input ro rang
+    # khong phai link GitHub, thay vi de task chay xong vai giay/phut roi
+    # moi bao FAILURE qua polling; (2) gia tri "clean_url" (khong con
+    # tracking parameter nhu "?fbclid=...") la ban SE DUOC LUU vao
+    # Repo.url trong ingest_repo() -- phai sach tu day vi ui.py dung LAI
+    # CHINH field nay de xay link GitHub citation ve sau (github_file_url()),
+    # khong the de "sach luc clone, ban luc hien thi".
+    try:
+        clean_url = ingest.extract_github_url(body.url)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    task = ingest_task.delay(clean_url, user.id)
     return {"task_id": task.id}
 
 

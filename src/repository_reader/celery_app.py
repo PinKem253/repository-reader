@@ -16,6 +16,15 @@ celery_app = Celery(
     "repository_reader",
     broker=settings.redis_url,
     backend=settings.redis_url,
+    # `include`: bat Celery TU IMPORT tasks.py ngay luc khoi tao app nay --
+    # truoc gio file nay KHONG import tasks.py o dau ca, nen viec task
+    # "ingest_task" co duoc REGISTER hay khong phu thuoc hoan toan vao may
+    # man (vd co module nao khac vo tinh import tasks.py truoc do trong
+    # CUNG tien trinh worker khong). Bug thuc te da gap: worker bao
+    # "Received unregistered task of type 'ingest_task'" du code
+    # tasks.py khong doi gi -- dung nguyen nhan "chua ai import module do".
+    # `include` lam dieu nay TUONG MINH, khong con phu thuoc may ma nua.
+    include=["repository_reader.tasks"],
 )
 
 # task_track_started=True: Celery mac dinh CHI phan biet PENDING/SUCCESS/

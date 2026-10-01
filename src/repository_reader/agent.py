@@ -9,11 +9,13 @@ quyết định có gọi tool hay không, thay vì code cố định gọi sear
 
 import logging
 import json
+import contextlib
 from datetime import datetime, timezone
 from pathlib import Path
 
 from google import genai
 from google.genai import types
+from langfuse import Langfuse
 
 from repository_reader import tools
 from repository_reader.config import settings
@@ -62,6 +64,56 @@ def _log_run_stats(question: str, repo_id: int, round_num: int, exhausted_budget
 # 1 client dùng chung cho cả module — cùng pattern với vector_store.py/
 # generation.py: khởi tạo 1 lần lúc import, không tạo lại mỗi lần gọi run().
 client = genai.Client(api_key=settings.llm_api_key)
+
+# --- Track 4 mục 6: Langfuse client (observability — trace + cost tracking) ---
+# Bật/tắt dựa vào 2 field key trong settings (xem config.py) — rỗng = TẮT.
+# agent.py vẫn phải chạy đúng khi tắt (vd lúc chưa setup Langfuse) nên dùng
+# `_trace()` bên dưới: trả về context manager thật nếu bật, trả về
+# `contextlib.nullcontext(None)` nếu tắt — gọi chỗ dùng không cần if/else
+# riêng cho 2 trường hợp, chỉ cần check "is not None" trước khi `.update()`.
+_LANGFUSE_ENABLED = bool(settings.langfuse_public_key and settings.langfuse_secret_key)
+langfuse_client = (
+    Langfuse(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        host=settings.langfuse_base_url,
+    )
+    if _LANGFUSE_ENABLED
+    else None
+)
+
+
+def _trace(**kwargs):
+    """Wrapper quanh `langfuse_client.start_as_current_observation()` —
+    xem comment ở _LANGFUSE_ENABLED phía trên để hiểu lý do cần hàm này."""
+    if langfuse_client is None:
+        return contextlib.nullcontext(None)
+    return langfuse_client.start_as_current_observation(**kwargs)
+
+
+def _serialize_contents(contents) -> list[dict]:
+    """Chuyển `contents` (list `types.Content` của SDK google-genai, object
+    pydantic riêng) sang list dict JSON-serialize được -- dùng làm `input`
+    khi tạo generation Langfuse. SDK không tự biết serialize object của 1
+    SDK khác, nên phải tự làm tay ở đây (phát hiện qua tự audit trace thật:
+    thiếu dòng này, cột Input của mọi generation hiện rỗng trên dashboard).
+    """
+    serialized = []
+    for content in contents:
+        parts_out = []
+        for p in content.parts:
+            if p.text is not None:
+                parts_out.append({"text": p.text})
+            elif p.function_call is not None:
+                parts_out.append({
+                    "function_call": {"name": p.function_call.name, "args": dict(p.function_call.args)}
+                })
+            elif p.function_response is not None:
+                parts_out.append({
+                    "function_response": {"name": p.function_response.name, "response": p.function_response.response}
+                })
+        serialized.append({"role": content.role, "parts": parts_out})
+    return serialized
 
 MODEL_NAME = "gemini-3.5-flash-lite"
 
@@ -224,105 +276,187 @@ def run(question: str, repo_id: int) -> dict:
         types.Content(role="user", parts=[types.Part.from_text(text=question)])
     ]
 
-    for turn in range(MAX_TURNS):
-        round_num = turn + 1  # hiển thị 1-indexed (R1, R2...) cho dễ đọc log --
-                              # biến `turn` nội bộ vẫn 0-indexed vì range() tự nhiên vậy
-
-        response = _generate_with_retry(
-            model=MODEL_NAME,
-            contents=contents,
-            config=_GENERATE_CONFIG,
-        )
-
-        candidate = response.candidates[0]
-        part = candidate.content.parts[0]
-
-        # --- Reasoning: model chọn hành động (gọi tool hay trả lời luôn) ---
-        if part.function_call is not None:
-            fn_name = part.function_call.name
-            fn_args = dict(part.function_call.args)
-
-            # Lưu lượt "model quyết định gọi tool" vào lịch sử — bắt buộc,
-            # thiếu bước này model sẽ quên đã gọi tool gì ở vòng kế tiếp.
-            contents.append(candidate.content)
-
-            # --- Action: thực thi tool thật ---
-            observation = tools.execute_tool(fn_name, fn_args, repo_id=repo_id)
-
-            # Cắt ngắn observation khi LOG (không cắt bản đưa cho model) --
-            # tránh tràn màn hình terminal khi observation dài (vd cả 1 file).
-            observation_preview = observation[:300] + ("..." if len(observation) > 300 else "")
-
-            logger.info(
-                f"\n========== R{round_num} ==========\n"
-                f"Tool gọi   : {fn_name}\n"
-                f"Args       : {fn_args}\n"
-                f"Observation: {observation_preview}"
-            )
-
-            # --- Observation: đưa kết quả ngược lại cho model đọc ---
-            # Gemini API chưa có role "tool" riêng — quy ước là bọc kết quả
-            # qua Part.from_function_response() rồi gửi dưới role "user"
-            # (đại diện "đây là dữ liệu hệ thống cấp tiếp", không phải người
-            # dùng gõ thật).
-            function_response_part = types.Part.from_function_response(
-                name=fn_name,
-                response={"result": observation},
-            )
-            contents.append(
-                types.Content(role="user", parts=[function_response_part])
-            )
-            continue  # quay lại đầu loop để model Reasoning tiếp
-
-        # --- Không gọi tool nữa -> đây là câu trả lời cuối cùng, model TỰ dừng ---
-        logger.info(
-            f"\n========== R{round_num} (FINAL) ==========\n"
-            f"Model dừng gọi tool, trả lời trực tiếp.\n"
-            f"Answer: {response.text[:300]}"
-        )
-        _log_run_stats(question, repo_id, round_num, exhausted_budget=False)
-        return {"answer": response.text, "exhausted_budget": False}
-
-    # --- Hết MAX_TURNS mà model vẫn chưa tự dừng: ép 1 lượt trả lời cuối ---
-    # Trước đây (bug cũ): trả thẳng 1 câu tiếng Việt cứng "Xin lỗi, không thể
-    # tạo câu trả lời..." -- bỏ phí toàn bộ observation đã thu thập được qua
-    # N vòng trước đó, dù model có thể đã đủ dữ kiện để trả lời 1 phần.
+    # --- Track 4 mục 6: 1 root observation Langfuse bọc TOÀN BỘ 1 lần run() ---
+    # as_type="agent" (không phải "span" chung) -- theo đúng best-practice
+    # của Langfuse (đã fetch doc https://langfuse.com/docs/observability/
+    # features/observation-types trước khi code): "agent" dành riêng cho
+    # observation "tự quyết định luồng chạy + điều phối gọi tool", đúng bản
+    # chất ReAct loop ở đây -- "span" chỉ là loại chung khi không có type cụ
+    # thể hơn. Mọi generation (LLM call)/retriever (tool call) tạo bên trong
+    # block này tự lồng làm con của root này qua OTel context (SDK v3 tự
+    # propagate, không cần truyền tay parent_id) — xem `_trace()`.
     #
-    # Cách mới: gọi lại model 1 lần nữa với NGUYÊN lịch sử "contents" đã có
-    # (không mất context), nhưng dùng _FINAL_ANSWER_CONFIG (không có tools)
-    # để chặn cứng khả năng gọi tool tiếp -- buộc model phải trả lời bằng
-    # text ngay, đồng thời thêm FORCED_FINAL_INSTRUCTION để nhắc nó không
-    # được đoán bừa chỉ vì bị dồn vào chân tường.
-    logger.warning(
-        f"\n========== HẾT {MAX_TURNS} VÒNG, ÉP MODEL TRẢ LỜI LƯỢT CUỐI ==========\n"
-        f"Câu hỏi: {question}"
-    )
-    contents.append(
-        types.Content(
-            role="user", parts=[types.Part.from_text(text=FORCED_FINAL_INSTRUCTION)]
-        )
-    )
-    final_response = _generate_with_retry(
-        model=MODEL_NAME,
-        contents=contents,
-        config=_FINAL_ANSWER_CONFIG,
-    )
+    # Tên "answer-question" cố định, KHÔNG nhúng giá trị động (vd round_num,
+    # repo_id) vào tên — đúng best-practice "Keep names static" (Langfuse
+    # dùng name để group/filter trong dashboard, tên đổi theo từng lần chạy
+    # sẽ phá mất khả năng đó). Giá trị động (repo_id, exhausted_budget) đi
+    # vào metadata, không vào name.
+    with _trace(
+        as_type="agent", name="answer-question", input=question,
+        metadata={"repo_id": repo_id},
+    ) as root_span:
+        for turn in range(MAX_TURNS):
+            round_num = turn + 1  # hiển thị 1-indexed (R1, R2...) cho dễ đọc log --
+                                  # biến `turn` nội bộ vẫn 0-indexed vì range() tự nhiên vậy
 
-    # Banner cảnh báo NỔI BẬT riêng cho developer đọc log terminal -- phân
-    # biệt rõ với block "R{n} (FINAL)" bình thường ở trên, để không nhầm
-    # đây là model tự nguyện kết thúc sớm.
-    logger.warning(
-        "\n"
-        "########################################################\n"
-        "# CẢNH BÁO: câu trả lời dưới đây được ÉP SINH sau khi hết\n"
-        f"# {MAX_TURNS} vòng loop -- KHÔNG PHẢI model tự kết thúc sớm.\n"
-        "# Độ tin cậy có thể thấp hơn bình thường, xem lại trace ở trên.\n"
-        "########################################################\n"
-        f"Câu hỏi: {question}\n"
-        f"Answer : {final_response.text[:300]}"
-    )
-    _log_run_stats(question, repo_id, MAX_TURNS, exhausted_budget=True)
-    return {"answer": final_response.text, "exhausted_budget": True}
+            # Tên generation "llm-call" CỐ ĐỊNH cho mọi vòng (round_num đi vào
+            # metadata, không vào tên) -- cùng lý do static naming ở trên.
+            with _trace(
+                as_type="generation", name="llm-call", model=MODEL_NAME,
+                input=_serialize_contents(contents), metadata={"round": round_num},
+            ) as generation:
+                response = _generate_with_retry(
+                    model=MODEL_NAME,
+                    contents=contents,
+                    config=_GENERATE_CONFIG,
+                )
+                candidate = response.candidates[0]
+                part = candidate.content.parts[0]
+
+                if generation is not None:
+                    usage = response.usage_metadata
+                    # Output PHẢI phản ánh đúng những gì model thực sự quyết
+                    # định ở lượt này: nếu model chọn gọi tool, response.text
+                    # thường rỗng/None -- ghi lại chính quyết định gọi tool
+                    # (tên + args) làm output mới có ý nghĩa để đọc lại sau
+                    # này, thay vì để trống.
+                    gen_output = (
+                        {"tool_call": part.function_call.name, "args": dict(part.function_call.args)}
+                        if part.function_call is not None
+                        else response.text
+                    )
+                    generation.update(
+                        output=gen_output,
+                        usage_details={
+                            "input": usage.prompt_token_count,
+                            "output": usage.candidates_token_count,
+                        },
+                    )
+
+            # --- Reasoning: model chọn hành động (gọi tool hay trả lời luôn) ---
+            if part.function_call is not None:
+                fn_name = part.function_call.name
+                fn_args = dict(part.function_call.args)
+
+                # Lưu lượt "model quyết định gọi tool" vào lịch sử — bắt buộc,
+                # thiếu bước này model sẽ quên đã gọi tool gì ở vòng kế tiếp.
+                contents.append(candidate.content)
+
+                # --- Action: thực thi tool thật ---
+                # as_type="retriever" (không phải "tool"/"span" chung) -- cả
+                # 4 tool trong tools.py (search_semantic/search_exact/
+                # read_file/list_repo_structure) đều CHỈ đọc dữ liệu, không
+                # đổi state gì (đúng Scope read-only đã thiết kế từ B4/OWASP
+                # LLM06) -- khớp CHÍNH XÁC định nghĩa "retriever" của
+                # Langfuse ("data-retrieval step that only looks something
+                # up rather than changing state"), đã tự xác nhận qua doc
+                # thay vì đoán. Tên dùng nguyên fn_name (đổi "_"->"-" cho
+                # đúng convention kebab-case) -- tên CỐ ĐỊNH theo loại tool,
+                # không nhúng round_num/args vào tên.
+                with _trace(
+                    as_type="retriever", name=fn_name.replace("_", "-"), input=fn_args,
+                ) as tool_span:
+                    observation = tools.execute_tool(fn_name, fn_args, repo_id=repo_id)
+                    if tool_span is not None:
+                        # Cắt ngắn khi gửi lên Langfuse, giống hệt lý do cắt
+                        # observation_preview khi log terminal bên dưới.
+                        tool_span.update(output=observation[:2000])
+
+                # Cắt ngắn observation khi LOG (không cắt bản đưa cho model) --
+                # tránh tràn màn hình terminal khi observation dài (vd cả 1 file).
+                observation_preview = observation[:300] + ("..." if len(observation) > 300 else "")
+
+                logger.info(
+                    f"\n========== R{round_num} ==========\n"
+                    f"Tool gọi   : {fn_name}\n"
+                    f"Args       : {fn_args}\n"
+                    f"Observation: {observation_preview}"
+                )
+
+                # --- Observation: đưa kết quả ngược lại cho model đọc ---
+                # Gemini API chưa có role "tool" riêng — quy ước là bọc kết quả
+                # qua Part.from_function_response() rồi gửi dưới role "user"
+                # (đại diện "đây là dữ liệu hệ thống cấp tiếp", không phải người
+                # dùng gõ thật).
+                function_response_part = types.Part.from_function_response(
+                    name=fn_name,
+                    response={"result": observation},
+                )
+                contents.append(
+                    types.Content(role="user", parts=[function_response_part])
+                )
+                continue  # quay lại đầu loop để model Reasoning tiếp
+
+            # --- Không gọi tool nữa -> đây là câu trả lời cuối cùng, model TỰ dừng ---
+            logger.info(
+                f"\n========== R{round_num} (FINAL) ==========\n"
+                f"Model dừng gọi tool, trả lời trực tiếp.\n"
+                f"Answer: {response.text[:300]}"
+            )
+            _log_run_stats(question, repo_id, round_num, exhausted_budget=False)
+            if root_span is not None:
+                root_span.update(output=response.text, metadata={"exhausted_budget": False})
+            return {"answer": response.text, "exhausted_budget": False}
+
+        # --- Hết MAX_TURNS mà model vẫn chưa tự dừng: ép 1 lượt trả lời cuối ---
+        # Trước đây (bug cũ): trả thẳng 1 câu tiếng Việt cứng "Xin lỗi, không thể
+        # tạo câu trả lời..." -- bỏ phí toàn bộ observation đã thu thập được qua
+        # N vòng trước đó, dù model có thể đã đủ dữ kiện để trả lời 1 phần.
+        #
+        # Cách mới: gọi lại model 1 lần nữa với NGUYÊN lịch sử "contents" đã có
+        # (không mất context), nhưng dùng _FINAL_ANSWER_CONFIG (không có tools)
+        # để chặn cứng khả năng gọi tool tiếp -- buộc model phải trả lời bằng
+        # text ngay, đồng thời thêm FORCED_FINAL_INSTRUCTION để nhắc nó không
+        # được đoán bừa chỉ vì bị dồn vào chân tường.
+        logger.warning(
+            f"\n========== HẾT {MAX_TURNS} VÒNG, ÉP MODEL TRẢ LỜI LƯỢT CUỐI ==========\n"
+            f"Câu hỏi: {question}"
+        )
+        contents.append(
+            types.Content(
+                role="user", parts=[types.Part.from_text(text=FORCED_FINAL_INSTRUCTION)]
+            )
+        )
+        # Tên riêng "llm-call-forced-final" (khác "llm-call" ở trên) -- đây
+        # là 1 LOẠI lời gọi khác về chất (không có tools, system instruction
+        # khác), KHÔNG phải 1 giá trị động như round_num -- tên riêng biệt
+        # giúp tách bạch 2 loại khi filter/so sánh chi phí trên dashboard.
+        with _trace(
+            as_type="generation", name="llm-call-forced-final", model=MODEL_NAME,
+            input=_serialize_contents(contents),
+        ) as generation:
+            final_response = _generate_with_retry(
+                model=MODEL_NAME,
+                contents=contents,
+                config=_FINAL_ANSWER_CONFIG,
+            )
+            if generation is not None:
+                usage = final_response.usage_metadata
+                generation.update(
+                    output=final_response.text,
+                    usage_details={
+                        "input": usage.prompt_token_count,
+                        "output": usage.candidates_token_count,
+                    },
+                )
+
+        # Banner cảnh báo NỔI BẬT riêng cho developer đọc log terminal -- phân
+        # biệt rõ với block "R{n} (FINAL)" bình thường ở trên, để không nhầm
+        # đây là model tự nguyện kết thúc sớm.
+        logger.warning(
+            "\n"
+            "########################################################\n"
+            "# CẢNH BÁO: câu trả lời dưới đây được ÉP SINH sau khi hết\n"
+            f"# {MAX_TURNS} vòng loop -- KHÔNG PHẢI model tự kết thúc sớm.\n"
+            "# Độ tin cậy có thể thấp hơn bình thường, xem lại trace ở trên.\n"
+            "########################################################\n"
+            f"Câu hỏi: {question}\n"
+            f"Answer : {final_response.text[:300]}"
+        )
+        _log_run_stats(question, repo_id, MAX_TURNS, exhausted_budget=True)
+        if root_span is not None:
+            root_span.update(output=final_response.text, metadata={"exhausted_budget": True})
+        return {"answer": final_response.text, "exhausted_budget": True}
 
 
 if __name__ == "__main__":
@@ -342,3 +476,11 @@ if __name__ == "__main__":
     print(result["answer"])
     if result["exhausted_budget"]:
         print("[DEBUG] Câu trả lời trên bị ép sinh sau khi hết MAX_TURNS.")
+
+    # Langfuse SDK gửi dữ liệu lên server theo lô ở 1 background thread --
+    # script ngắn chạy xong là process kết thúc NGAY, có thể chưa kịp gửi
+    # hết. flush() ở đây là bắt buộc CHO RIÊNG kiểu chạy standalone này.
+    # uvicorn (process sống lâu) không cần dòng này -- background thread có
+    # đủ thời gian tự gửi giữa các request.
+    if langfuse_client is not None:
+        langfuse_client.flush()

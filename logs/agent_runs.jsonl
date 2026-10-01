@@ -15,3 +15,35 @@
 {"timestamp": "2026-09-30T08:35:59.427824+00:00", "repo_id": 16, "question": "repo này làm về cái gì và có những core module nào ", "round_num": 4, "exhausted_budget": false}
 {"timestamp": "2026-09-30T08:37:01.373769+00:00", "repo_id": 18, "question": "repo này làm về cái gì và có những core module nào ", "round_num": 6, "exhausted_budget": false}
 {"timestamp": "2026-09-30T08:39:58.867167+00:00", "repo_id": 18, "question": "repo này làm về cái gì và có những core module nào ", "round_num": 6, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:05:06.871787+00:00", "repo_id": 13, "question": "Repository này là gì, dùng để làm gì?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:05:10.806003+00:00", "repo_id": 13, "question": "File README.md nói gì về mục đích chính của dự án?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:06:41.063676+00:00", "repo_id": 13, "question": "Repository này là gì, dùng để làm gì?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:06:45.511375+00:00", "repo_id": 13, "question": "File README.md nói gì về mục đích chính của dự án?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:07:03.034963+00:00", "repo_id": 13, "question": "Repo này làm gì, dùng license gì, cách cài đặt/dependencies ra sao, có testing framework nào không, và có CI/CD pipeline (vd GitHub Actions) không?", "round_num": 8, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:07:13.177630+00:00", "repo_id": 13, "question": "Cấu trúc thư mục của dự án như thế nào, và entry point chính để chạy chương trình là gì?", "round_num": 5, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:08:34.736096+00:00", "repo_id": 13, "question": "File example.ipynb dùng để làm gì, và các bước chính trong đó để huấn luyện/sử dụng model TabM là gì?", "round_num": 10, "exhausted_budget": true}
+{"timestamp": "2026-10-01T06:08:43.096603+00:00", "repo_id": 13, "question": "File config.yaml dùng để cấu hình training pipeline có những tham số mặc định gì?", "round_num": 9, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:09:08.017930+00:00", "repo_id": 13, "question": "Dự án này kết nối tới database nào, và connection string được cấu hình ở đâu?", "round_num": 8, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:09:18.039609+00:00", "repo_id": 13, "question": "Thuật toán tối ưu hoá (optimizer) chính được dùng khi huấn luyện TabM hoạt động như thế nào?", "round_num": 8, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:16:58.368299+00:00", "repo_id": 10, "question": "Repository này là gì, dùng để làm gì?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:17:02.949403+00:00", "repo_id": 10, "question": "File README.md nói gì về mục đích chính của dự án?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:17:08.846832+00:00", "repo_id": 10, "question": "Repo này làm gì, dùng license gì, cách cài đặt/dependencies ra sao, có testing framework nào không, và có CI/CD pipeline (vd GitHub Actions) không?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:17:15.386151+00:00", "repo_id": 10, "question": "Cấu trúc thư mục của dự án như thế nào, và entry point chính để chạy chương trình là gì?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:17:29.679503+00:00", "repo_id": 10, "question": "File example.ipynb dùng để làm gì, và các bước chính trong đó để huấn luyện/sử dụng model TabM là gì?", "round_num": 5, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:18:47.836383+00:00", "repo_id": 10, "question": "File config.yaml dùng để cấu hình training pipeline có những tham số mặc định gì?", "round_num": 5, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:18:56.476302+00:00", "repo_id": 10, "question": "Dự án này kết nối tới database nào, và connection string được cấu hình ở đâu?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:19:13.458945+00:00", "repo_id": 10, "question": "Thuật toán tối ưu hoá (optimizer) chính được dùng khi huấn luyện TabM hoạt động như thế nào?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:25:40.771466+00:00", "repo_id": 12, "question": "Repository này là gì, dùng để làm gì?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:25:48.005283+00:00", "repo_id": 12, "question": "File README.md nói gì về mục đích chính của dự án?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:26:35.715399+00:00", "repo_id": 12, "question": "Repo này làm gì, dùng license gì, cách cài đặt/dependencies ra sao, có testing framework nào không, và có CI/CD pipeline (vd GitHub Actions) không?", "round_num": 10, "exhausted_budget": true}
+{"timestamp": "2026-10-01T06:26:45.563564+00:00", "repo_id": 12, "question": "Cấu trúc thư mục của dự án như thế nào, và entry point chính để chạy chương trình là gì?", "round_num": 4, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:27:34.881507+00:00", "repo_id": 12, "question": "File example.ipynb dùng để làm gì, và các bước chính trong đó để huấn luyện/sử dụng model TabM là gì?", "round_num": 10, "exhausted_budget": true}
+{"timestamp": "2026-10-01T06:27:53.608628+00:00", "repo_id": 12, "question": "File config.yaml dùng để cấu hình training pipeline có những tham số mặc định gì?", "round_num": 5, "exhausted_budget": false}
+{"timestamp": "2026-10-01T06:28:59.959601+00:00", "repo_id": 12, "question": "Thuật toán tối ưu hoá (optimizer) chính được dùng khi huấn luyện TabM hoạt động như thế nào?", "round_num": 9, "exhausted_budget": false}
+{"timestamp": "2026-10-01T07:28:05.057966+00:00", "repo_id": 13, "question": "What is this repository about?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T07:35:20.881780+00:00", "repo_id": 13, "question": "What is this repository about?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T07:39:32.091855+00:00", "repo_id": 13, "question": "What is this repository about?", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T08:08:02.495151+00:00", "repo_id": 16, "question": "repository này làm về vấn đề gì ", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T08:08:27.428192+00:00", "repo_id": 16, "question": "cái này có ứng dụng gì không ", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T08:15:28.424307+00:00", "repo_id": 16, "question": "repo này làm về cái gì ", "round_num": 3, "exhausted_budget": false}
+{"timestamp": "2026-10-01T08:15:53.076383+00:00", "repo_id": 16, "question": "ai nên quan tâm tới repo này ", "round_num": 2, "exhausted_budget": false}

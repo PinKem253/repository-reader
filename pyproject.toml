@@ -15,6 +15,7 @@ dependencies = [
     "fastapi>=0.141.1",
     "flagembedding>=1.4.2",
     "google-genai>=2.24.0",
+    "langfuse>=4.16.0",
     "pydantic-settings>=2.15.0",
     "pyjwt>=2.8.0",
     "python-multipart>=0.0.9",
@@ -22,6 +23,7 @@ dependencies = [
     "redis>=8.1.0",
     "sqlmodel>=0.0.42",
     "streamlit>=1.64.0",
+    "torch",
     "uvicorn>=0.52.4",
 ]
 
@@ -31,3 +33,29 @@ repository-reader = "repository_reader:main"
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+# Bug thuc te (2026-10-01): "torch" truoc gio chi la dependency GIAN TIEP
+# (keo vao qua "flagembedding"), nen uv tu lay ban CPU-only mac dinh tren
+# PyPI cho Windows -- may co GPU NVIDIA RTX 3060 (CUDA driver toi 13.0,
+# xac nhan qua nvidia-smi) nhung torch.cuda.is_available() tra False, lam
+# embedding.py (FlagEmbedding/BGEM3FlagModel) chay CPU, cuc cham voi repo
+# nhieu file (~12s/batch). Them "torch" vao dependencies (explicit, de
+# version duoc quan ly ro rang) + override index CHI tren Windows ve dung
+# kho wheel CUDA cua PyTorch -- macOS/Linux (neu co) van lay ban mac dinh
+# qua marker "sys_platform". cu128 (build cho CUDA 12.8) tuong thich voi
+# driver ho tro toi CUDA 13.0 (driver NVIDIA luon backward-compatible voi
+# runtime CUDA cu hon).
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
