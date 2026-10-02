@@ -24,6 +24,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from repository_reader import vector_store, generation, db, agent, auth, ingest
+from repository_reader.config import settings
 from repository_reader.models import User
 # Track 4 muc 3: import task (khong phai ingest_repo() truc tiep nua --
 # xem tasks.py) + celery_app (can truyen vao AsyncResult de no biet dung
@@ -274,8 +275,20 @@ async def create_repo_endpoint(body: IngestRequest, user: User = Depends(get_cur
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    task = ingest_task.delay(clean_url, user.id)
-    return {"task_id": task.id}
+    # Production deploy free-tier (2026-10-01): settings.use_celery_ingest
+    # la 1 CONG TAT -- True (mac dinh dev local) giu DUNG hanh vi Track 4
+    # muc 3 (day vao Celery, tra ve ngay). False (deploy KHONG tra tien cho
+    # Background Worker rieng tren Render): chay ingest_repo() DONG BO
+    # ngay trong request nay -- client phai doi het (rui ro cham toi han
+    # timeout cua platform voi repo rat lon), nhung khong can worker rieng.
+    # Tra ve CUNG 1 shape JSON ca 2 nhanh ("task_id" co the None) de ui.py
+    # xu ly duoc ca 2 truong hop bang 1 logic duy nhat.
+    if settings.use_celery_ingest:
+        task = ingest_task.delay(clean_url, user.id)
+        return {"task_id": task.id, "repo_id": None}
+    else:
+        repo_id = await ingest.ingest_repo(clean_url, owner_id=user.id)
+        return {"task_id": None, "repo_id": repo_id}
 
 
 @app.get("/tasks/{task_id}")

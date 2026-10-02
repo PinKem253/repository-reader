@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
+    # --- Production deploy (2026-10-01) ---
+    # True (mac dinh, dev local): POST /repos day task vao Celery/Redis --
+    # giu DUNG hanh vi Track 4 muc 3 da lam. False (deploy free-tier,
+    # KHONG tra tien cho 1 Background Worker rieng tren Render): POST
+    # /repos chay ingest_repo() DONG BO ngay trong request -- cham hon (vi
+    # client phai doi het, co rui ro cham toi han timeout cua platform voi
+    # repo rat lon) nhung khong can worker rieng. KHONG xoa code
+    # Celery/Redis -- chi la 1 cong tat, bat lai duoc ngay khi nang cap
+    # tra phi cho Background Worker ve sau.
+    use_celery_ingest: bool = True
+
     model_config = SettingsConfigDict(
         env_file = '.env'
     )

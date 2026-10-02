@@ -26,7 +26,10 @@ def upsert_chunks(all_chunks, dense_vecs, repo_id):
                 uuid.NAMESPACE_URL,
                 f"{repo_id}:{all_chunks[i]['file']}:{all_chunks[i]['start_line']}",
             )),
-            vector=dense_vecs[i].tolist(),
+            # Khong con ".tolist()" -- embedding.embed_texts() (2026-10-01,
+            # doi sang Gemini Embedding API) tra ve thang list[list[float]],
+            # khac ban cu (BGE-M3/FlagEmbedding tra numpy array can .tolist()).
+            vector=dense_vecs[i],
             payload={
                 "repo_id": repo_id,
                 "file": all_chunks[i]["file"],
@@ -40,7 +43,11 @@ def upsert_chunks(all_chunks, dense_vecs, repo_id):
     client.upsert(collection_name="repo_chunks", points=points)
 
 def search_semantic(query, repo_id: int, top_k: int = 5):
-    embed_query = embedding.embed_texts([query])[0].tolist()
+    # task_type="RETRIEVAL_QUERY" -- khac "RETRIEVAL_DOCUMENT" (mac dinh
+    # cua embed_texts(), dung luc ingest chunk o tren) vi day la embed 1
+    # CAU HOI tim kiem, khong phai 1 doan noi dung can luu tru -- best
+    # practice rieng cua Gemini Embedding cho bai toan retrieval.
+    embed_query = embedding.embed_texts([query], task_type="RETRIEVAL_QUERY")[0]
     repo_filter = Filter(
         must=[FieldCondition(key="repo_id", match=MatchValue(value=repo_id))]
     )
