@@ -4,9 +4,11 @@ import logging
 import re
 from pathlib import Path
 from urllib.parse import quote
+import os
+
 logger = logging.getLogger(__name__)
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.environ.get("API_BASE", "http://localhost:8000")
 
 # ================= Format citation trong cau tra loi (UX polish) =================
 # Van de nguoi dung phat hien: model sinh citation THO ngay trong van ban,
@@ -58,9 +60,13 @@ def format_citations(answer: str) -> tuple[str, list[dict]]:
             if key not in seen:
                 number = len(sources) + 1
                 seen[key] = number
-                sources.append({"number": number, "file": file_, "start": start, "end": end})
+                sources.append(
+                    {"number": number, "file": file_, "start": start, "end": end}
+                )
             number = seen[key]
-            links.append(f'<a href="#cite-{number}" class="citation-link">[{number}]</a>')
+            links.append(
+                f'<a href="#cite-{number}" class="citation-link">[{number}]</a>'
+            )
         return "".join(links)
 
     rendered = _CITATION_BRACKET_RE.sub(_replace_bracket, answer)
@@ -103,7 +109,7 @@ def normalize_citation_path(raw_path: str, repo_id: int) -> str:
     # "cloned_repos/{repo_id}/" (xem ingest.py chunk_file/_search_exact).
     clone_prefix = f"cloned_repos/{repo_id}/"
     if cleaned.startswith(clone_prefix):
-        cleaned = cleaned[len(clone_prefix):]
+        cleaned = cleaned[len(clone_prefix) :]
 
     # Truong hop read_file: model co the tu them "./" o dau path.
     while cleaned.startswith("./"):
@@ -112,7 +118,9 @@ def normalize_citation_path(raw_path: str, repo_id: int) -> str:
     return cleaned.lstrip("/")
 
 
-def github_file_url(repo_url: str, default_branch, file_path: str, start: str, end: str):
+def github_file_url(
+    repo_url: str, default_branch, file_path: str, start: str, end: str
+):
     """Xay URL GitHub tro thang toi file + highlight dung khoang dong.
     Tra ve None neu chua biet default_branch (repo ingest truoc khi co
     field nay) hoac file_path rong sau khi chuan hoa -- ui.py se tu hien
@@ -122,7 +130,9 @@ def github_file_url(repo_url: str, default_branch, file_path: str, start: str, e
         return None
     # quote tung doan path rieng (giu nguyen dau "/") -- xu ly dung khi
     # ten file/thu muc co khoang trang hoac ky tu dac biet.
-    quoted_path = "/".join(quote(segment) for segment in file_path.split("/") if segment)
+    quoted_path = "/".join(
+        quote(segment) for segment in file_path.split("/") if segment
+    )
     if not quoted_path:
         return None
     return f"{repo_url.rstrip('/')}/blob/{default_branch}/{quoted_path}#L{start}-L{end}"
@@ -182,7 +192,9 @@ if st.session_state.token is None:
 
     with tab_login:
         login_username = st.text_input("Username", key="login_username")
-        login_password = st.text_input("Password", type="password", key="login_password")
+        login_password = st.text_input(
+            "Password", type="password", key="login_password"
+        )
         if st.button("Dang nhap", key="login_button"):
             try:
                 # OAuth2PasswordRequestForm o server doc du lieu dang FORM
@@ -204,7 +216,9 @@ if st.session_state.token is None:
 
     with tab_signup:
         signup_username = st.text_input("Username", key="signup_username")
-        signup_password = st.text_input("Password", type="password", key="signup_password")
+        signup_password = st.text_input(
+            "Password", type="password", key="signup_password"
+        )
         if st.button("Dang ky", key="signup_button"):
             try:
                 # /signup nhan JSON thuong (Pydantic SignupRequest), KHAC
@@ -214,7 +228,9 @@ if st.session_state.token is None:
                     json={"username": signup_username, "password": signup_password},
                 )
                 response.raise_for_status()
-                st.success("Tao tai khoan thanh cong -- qua tab 'Dang nhap' de tiep tuc.")
+                st.success(
+                    "Tao tai khoan thanh cong -- qua tab 'Dang nhap' de tiep tuc."
+                )
             except Exception:
                 logger.exception("Signup failed")
                 st.error("Dang ky that bai -- co the username da ton tai.")
@@ -266,10 +282,14 @@ if st.button("Ingest"):
             # embed roi moi tra ve (khong co task de poll), nen bao thanh
             # cong NGAY, khong di qua fragment poll ben duoi.
             st.success(f"Ingest xong — repo_id = {data['repo_id']}")
-            st.rerun(scope="app")  # rerun ca trang de phan "Chon repository" doc lai GET /repos, thay repo moi
+            st.rerun(
+                scope="app"
+            )  # rerun ca trang de phan "Chon repository" doc lai GET /repos, thay repo moi
     except Exception:
         logger.exception("Ingest request failed")
-        st.error("Ingest thất bại — xem log terminal FastAPI, hoặc thử đăng xuất/đăng nhập lại nếu phiên đã hết hạn.")
+        st.error(
+            "Ingest thất bại — xem log terminal FastAPI, hoặc thử đăng xuất/đăng nhập lại nếu phiên đã hết hạn."
+        )
 
 if st.session_state.ingest_task_id:
     # st.fragment(run_every=...): CHI doan nay cua script duoc chay lai
@@ -284,7 +304,9 @@ if st.session_state.ingest_task_id:
         if not task_id:
             return
         try:
-            response = requests.get(f"{API_BASE}/tasks/{task_id}", headers=auth_headers())
+            response = requests.get(
+                f"{API_BASE}/tasks/{task_id}", headers=auth_headers()
+            )
             response.raise_for_status()
             data = response.json()
         except Exception:
@@ -399,8 +421,8 @@ else:
                 for s in sources:
                     clean_path = normalize_citation_path(s["file"], repo_id)
                     label_html = (
-                        f'<b>[{s["number"]}]</b> <code>{clean_path}</code> '
-                        f'— dòng {s["start"]}–{s["end"]}'
+                        f"<b>[{s['number']}]</b> <code>{clean_path}</code> "
+                        f"— dòng {s['start']}–{s['end']}"
                     )
                     anchor_html = f'<a id="cite-{s["number"]}"></a>'
 
@@ -410,11 +432,11 @@ else:
                     # default_branch cung khong duoc phep bien thanh link.
                     if not citation_file_exists(repo_id, clean_path):
                         row_html = (
-                            f'{anchor_html}{label_html} '
+                            f"{anchor_html}{label_html} "
                             f'<span style="opacity:0.7;">⚠️ không xác '
-                            f'định được file nguồn này trong repo '
-                            f'đã ingest — có thể model trích dẫn nhầm, '
-                            f'không nên tin tưởng hoàn toàn.</span>'
+                            f"định được file nguồn này trong repo "
+                            f"đã ingest — có thể model trích dẫn nhầm, "
+                            f"không nên tin tưởng hoàn toàn.</span>"
                         )
                         st.markdown(row_html, unsafe_allow_html=True)
                         continue
@@ -437,9 +459,9 @@ else:
                         # URL, chi hien text + giai thich vi sao chua bam
                         # duoc.
                         row_html = (
-                            f'{anchor_html}{label_html} '
+                            f"{anchor_html}{label_html} "
                             f'<span style="opacity:0.6;">(ingest lại repo này '
-                            f'để có link trực tiếp)</span>'
+                            f"để có link trực tiếp)</span>"
                         )
                     st.markdown(row_html, unsafe_allow_html=True)
             else:
@@ -448,4 +470,6 @@ else:
                 st.caption("Câu trả lời này không có trích dẫn cụ thể.")
         except Exception:
             logger.exception("Send request failed")
-            st.error("Có lỗi khi gọi server — repo có thể không tồn tại/không phải của bạn, hoặc phiên đăng nhập đã hết hạn.")
+            st.error(
+                "Có lỗi khi gọi server — repo có thể không tồn tại/không phải của bạn, hoặc phiên đăng nhập đã hết hạn."
+            )
