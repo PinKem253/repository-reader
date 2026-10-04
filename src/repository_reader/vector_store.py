@@ -4,9 +4,16 @@ from qdrant_client.models import (
     Filter, FieldCondition, MatchValue,
 )
 from repository_reader import embedding
+from repository_reader.config import settings
 import uuid
 
-client = QdrantClient(url = "http://localhost:6333")
+# Doc tu settings thay vi hardcode "localhost" (2026-10-04) -- local dev
+# van chay dung vi settings.qdrant_url default khop Qdrant Docker local,
+# production (Render) set QDRANT_URL/QDRANT_API_KEY qua env var la tro
+# dung sang Qdrant Cloud, khong sua code gi them. api_key=None (khong
+# phai "") khi rong -- qdrant-client hieu None la "khong gui header key",
+# dung voi Qdrant local khong bat auth.
+client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
 
 def create_collection():
     client.create_collection(

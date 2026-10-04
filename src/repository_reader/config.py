@@ -51,6 +51,21 @@ class Settings(BaseSettings):
     # tra phi cho Background Worker ve sau.
     use_celery_ingest: bool = True
 
+    # --- Production deploy (2026-10-04) -- Qdrant ---
+    # Cung 1 pattern voi redis_url o tren: default khop DUNG Qdrant local
+    # (Docker container tren may ban, port 6333) -- local dev khong can
+    # set gi them. Production (Render) KHONG co Qdrant chay o localhost
+    # (web service va Qdrant la 2 may hoan toan khac nhau), nen PHAI set
+    # bien moi truong QDRANT_URL tro toi 1 Qdrant that su truy cap duoc
+    # tu xa (vd Qdrant Cloud) -- day la nguyen nhan deploy bi "Timed Out"
+    # da gap: code cu hardcode "http://localhost:6333", Render khong co
+    # gi o do ca.
+    qdrant_url: str = "http://localhost:6333"
+    # Qdrant local (Docker) khong can API key -- chuoi rong "" o day co
+    # nghia "khong gui key". Qdrant Cloud BAT BUOC can key, set qua bien
+    # moi truong QDRANT_API_KEY tren Render.
+    qdrant_api_key: str = ""
+
     model_config = SettingsConfigDict(
         env_file = '.env'
     )
