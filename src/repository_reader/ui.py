@@ -366,110 +366,188 @@ else:
     )
     repo_id = selected_repo["id"]
 
-    question = st.text_input("Your question")
+   # Track 4 mục 13 (multi-turn memory) + UX polish chat (2026-10-01):
+    # conversation_id (gửi lên server để model nhớ ngữ cảnh) + chat_history
+    # (CHỈ để HIỂN THỊ lại các lượt cũ trên UI -- server/Postgres vẫn là
+    # nguồn sự thật, list này mất khi đóng tab, không sao vì chỉ là màn
+    # hình). Cả 2 phải lưu trong session_state -- cùng lý do đã giải thích ở
+    # token/ingest_task_id phía trên (Streamlit rerun toàn bộ script mỗi
+    # lần tương tác, biến Python thường sẽ mất).
+    if "conversation_id" not in st.session_state:
+        st.session_state.conversation_id = None
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "active_repo_id" not in st.session_state:
+        st.session_state.active_repo_id = None
 
-    if st.button("Send"):
-        try:
-            response = requests.post(
-                f"{API_BASE}/repo/{repo_id}",
-                json={"question": question},
-                headers=auth_headers(),
-            )
-            response.raise_for_status()
-            data = response.json()
+    # Đổi sang repo KHÁC giữa chừng -- lịch sử hội thoại cũ không còn hợp lệ
+    # cho repo mới (giữ nguyên conversation_id sẽ làm model lẫn ngữ cảnh 2
+    # repo khác nhau) -- tự reset ngay, không chờ người dùng tự bấm nút.
+    if st.session_state.active_repo_id != repo_id:
+        st.session_state.conversation_id = None
+        st.session_state.chat_history = []
+        st.session_state.active_repo_id = repo_id
 
-            # #2: hiển thị tự nhiên — answer là text sẵn, không cần dump cả object.
-            st.subheader("Trả lời")
+    if st.session_state.conversation_id is not None:
+        col_info, col_reset = st.columns([3, 1])
+        col_info.caption(
+            f"Đang tiếp tục cuộc trò chuyện #{st.session_state.conversation_id} "
+            "— model sẽ nhớ các câu hỏi/trả lời trước trong phiên này."
+        )
+        if col_reset.button("Cuộc trò chuyện mới"):
+            st.session_state.conversation_id = None
+            st.session_state.chat_history = []
+            st.rerun()
 
-            # exhausted_budget=True: agent KHÔNG tự kết thúc sớm, câu trả lời
-            # là kết quả của lượt ÉP trả lời sau khi hết vòng loop (xem
-            # agent.py). Không chặn câu trả lời, chỉ cảnh báo nhẹ để người
-            # dùng biết nên kiểm tra kỹ hơn / hỏi cụ thể hơn nếu cần.
-            if data.get("exhausted_budget"):
+    # CSS cho citation-link -- khai 1 LẦN DUY NHẤT trước toàn bộ khung chat
+    # (trước đây khai lại mỗi lần có câu trả lời mới -- vô hại nhưng dư
+    # thừa khi giờ có nhiều lượt chat cùng hiện trên 1 trang).
+    st.markdown(
+        "<style>"
+        ".citation-link {color:#1a73e8; font-weight:600; text-decoration:none;}"
+        ".citation-link:hover {text-decoration:underline;}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+
+    def render_answer(answer_text: str) -> None:
+        """Hiển thị PHẦN TRẢ LỜI của 1 lượt (dùng chung cho cả lượt cũ lấy
+        lại từ chat_history và lượt mới vừa nhận) -- giữ nguyên đúng logic
+        citation đã có (format_citations/normalize_citation_path/
+        github_file_url/citation_file_exists), chỉ đổi "Nguồn trích dẫn"
+        từ 1 khối luôn-mở sang `st.expander` cho gọn khi đã có nhiều lượt
+        chồng lên nhau trong khung chat."""
+        # Doi citation tho "[file:start-end]" trong answer thanh link so
+        # thu tu mau xanh [1][2]... + 1 list chi tiet rieng ben duoi (xem
+        # ham format_citations o dau file).
+        rendered_answer, sources = format_citations(answer_text)
+
+        # unsafe_allow_html=True: BAT BUOC de <a href="#cite-n"> va CSS
+        # ben tren duoc render thanh the HTML that, khong bi hien thi
+        # nguyen van dang text. Chi ap dung cho answer do model sinh ra
+        # (da qua he thong prompt kiem soat), khong phai input tu do cua
+        # nguoi dung -- an toan hon so voi echo thang input nguoi dung.
+        st.markdown(rendered_answer, unsafe_allow_html=True)
+
+        if not sources:
+            # Model co the tra loi ma khong trich dan duoc (vd "khong tim
+            # thay thong tin") -- khong de trong khong giai thich gi.
+            st.caption("Câu trả lời này không có trích dẫn cụ thể.")
+            return
+
+        with st.expander(f"Nguồn trích dẫn ({len(sources)})"):
+            # UX citation: moi dong gio la 1 link that toi dung file +
+            # dong tren GitHub (xem giai thich chi tiet o
+            # normalize_citation_path()/github_file_url() dau file) --
+            # khong con la text tinh nhu truoc. Anchor "cite-{n}" van
+            # giu de link so [n] trong cau tra loi nhay xuong dung day.
+            for s in sources:
+                clean_path = normalize_citation_path(s["file"], repo_id)
+                label_html = (
+                    f'<b>[{s["number"]}]</b> <code>{clean_path}</code> '
+                    f'— dòng {s["start"]}–{s["end"]}'
+                )
+                anchor_html = f'<a id="cite-{s["number"]}"></a>'
+
+                # UU TIEN kiem tra file co that khong TRUOC ca chuyen
+                # thieu default_branch -- citation gia (vd model dung
+                # ten tool "list_repo_structure" lam "file") thi DU CO
+                # default_branch cung khong duoc phep bien thanh link.
+                if not citation_file_exists(repo_id, clean_path):
+                    row_html = (
+                        f'{anchor_html}{label_html} '
+                        f'<span style="opacity:0.7;">⚠️ không xác '
+                        f'định được file nguồn này trong repo '
+                        f'đã ingest — có thể model trích dẫn nhầm, '
+                        f'không nên tin tưởng hoàn toàn.</span>'
+                    )
+                    st.markdown(row_html, unsafe_allow_html=True)
+                    continue
+
+                link = github_file_url(
+                    selected_repo["url"],
+                    selected_repo.get("default_branch"),
+                    clean_path,
+                    s["start"],
+                    s["end"],
+                )
+                if link:
+                    row_html = (
+                        f'{anchor_html}<a href="{link}" target="_blank" '
+                        f'rel="noopener" class="citation-link">{label_html}</a>'
+                    )
+                else:
+                    # File co that, nhung repo nay ingest TRUOC khi co
+                    # default_branch (chua ingest lai) -- khong doan
+                    # URL, chi hien text + giai thich vi sao chua bam
+                    # duoc.
+                    row_html = (
+                        f'{anchor_html}{label_html} '
+                        f'<span style="opacity:0.6;">(ingest lại repo này '
+                        f'để có link trực tiếp)</span>'
+                    )
+                st.markdown(row_html, unsafe_allow_html=True)
+
+    # ---- Hiện lại TOÀN BỘ lịch sử chat đã có của phiên này (st.chat_message
+    # vẽ bong bóng chat thật, giống khung chat bất kỳ) ----
+    for turn in st.session_state.chat_history:
+        with st.chat_message("user"):
+            st.markdown(turn["question"])
+        with st.chat_message("assistant"):
+            # exhausted_budget=True: agent KHÔNG tự kết thúc sớm, câu trả
+            # lời là kết quả của lượt ÉP trả lời sau khi hết vòng loop (xem
+            # agent.py). Không chặn câu trả lời, chỉ cảnh báo nhẹ.
+            if turn.get("exhausted_budget"):
                 st.warning(
                     "Câu trả lời này có thể chưa đầy đủ — hệ thống đã thử "
                     "hết số vòng tìm kiếm cho phép trước khi trả lời. Nếu "
                     "chưa đúng ý, thử hỏi cụ thể/ngắn gọn hơn."
                 )
+            render_answer(turn["answer"])
 
-            # Doi citation tho "[file:start-end]" trong answer thanh link so
-            # thu tu mau xanh [1][2]... + 1 list chi tiet rieng ben duoi (xem
-            # ham format_citations o dau file).
-            rendered_answer, sources = format_citations(data["answer"])
+    # ---- Ô nhập câu hỏi MỚI dạng chat -- st.chat_input tự xoá nội dung ô
+    # nhập ngay sau khi người dùng gửi, khác hẳn st.text_input cũ (phải tự
+    # xoá tay hoặc để nguyên câu cũ trong ô). ----
+    question = st.chat_input("Hỏi gì đó về repo này...")
+    if question:
+        with st.chat_message("user"):
+            st.markdown(question)
 
-            # unsafe_allow_html=True: BAT BUOC de <a href="#cite-n"> va CSS
-            # ben duoi duoc render thanh the HTML that, khong bi hien thi
-            # nguyen van dang text. Chi ap dung cho answer do model sinh ra
-            # (da qua he thong prompt kiem soat), khong phai input tu do cua
-            # nguoi dung -- an toan hon so voi echo thang input nguoi dung.
-            st.markdown(
-                "<style>"
-                ".citation-link {color:#1a73e8; font-weight:600; text-decoration:none;}"
-                ".citation-link:hover {text-decoration:underline;}"
-                "</style>",
-                unsafe_allow_html=True,
-            )
-            st.markdown(rendered_answer, unsafe_allow_html=True)
-
-            st.subheader("Nguồn trích dẫn")
-            if sources:
-                # UX citation: moi dong gio la 1 link that toi dung file +
-                # dong tren GitHub (xem giai thich chi tiet o
-                # normalize_citation_path()/github_file_url() dau file) --
-                # khong con la text tinh nhu truoc. Anchor "cite-{n}" van
-                # giu de link so [n] trong cau tra loi nhay xuong dung day.
-                for s in sources:
-                    clean_path = normalize_citation_path(s["file"], repo_id)
-                    label_html = (
-                        f"<b>[{s['number']}]</b> <code>{clean_path}</code> "
-                        f"— dòng {s['start']}–{s['end']}"
+        with st.chat_message("assistant"):
+            try:
+                with st.spinner("Đang tra cứu repo..."):
+                    response = requests.post(
+                        f"{API_BASE}/repo/{repo_id}",
+                        json={
+                            "question": question,
+                            "conversation_id": st.session_state.conversation_id,
+                        },
+                        headers=auth_headers(),
                     )
-                    anchor_html = f'<a id="cite-{s["number"]}"></a>'
+                    response.raise_for_status()
+                    data = response.json()
 
-                    # UU TIEN kiem tra file co that khong TRUOC ca chuyen
-                    # thieu default_branch -- citation gia (vd model dung
-                    # ten tool "list_repo_structure" lam "file") thi DU CO
-                    # default_branch cung khong duoc phep bien thanh link.
-                    if not citation_file_exists(repo_id, clean_path):
-                        row_html = (
-                            f"{anchor_html}{label_html} "
-                            f'<span style="opacity:0.7;">⚠️ không xác '
-                            f"định được file nguồn này trong repo "
-                            f"đã ingest — có thể model trích dẫn nhầm, "
-                            f"không nên tin tưởng hoàn toàn.</span>"
-                        )
-                        st.markdown(row_html, unsafe_allow_html=True)
-                        continue
+                # Lưu lại conversation_id server trả về -- lượt kế tiếp (nếu
+                # người dùng không bấm "Cuộc trò chuyện mới") sẽ tự gửi kèm
+                # giá trị này để tiếp tục đúng phiên.
+                st.session_state.conversation_id = data.get("conversation_id")
 
-                    link = github_file_url(
-                        selected_repo["url"],
-                        selected_repo.get("default_branch"),
-                        clean_path,
-                        s["start"],
-                        s["end"],
+                if data.get("exhausted_budget"):
+                    st.warning(
+                        "Câu trả lời này có thể chưa đầy đủ — hệ thống đã thử "
+                        "hết số vòng tìm kiếm cho phép trước khi trả lời. Nếu "
+                        "chưa đúng ý, thử hỏi cụ thể/ngắn gọn hơn."
                     )
-                    if link:
-                        row_html = (
-                            f'{anchor_html}<a href="{link}" target="_blank" '
-                            f'rel="noopener" class="citation-link">{label_html}</a>'
-                        )
-                    else:
-                        # File co that, nhung repo nay ingest TRUOC khi co
-                        # default_branch (chua ingest lai) -- khong doan
-                        # URL, chi hien text + giai thich vi sao chua bam
-                        # duoc.
-                        row_html = (
-                            f"{anchor_html}{label_html} "
-                            f'<span style="opacity:0.6;">(ingest lại repo này '
-                            f"để có link trực tiếp)</span>"
-                        )
-                    st.markdown(row_html, unsafe_allow_html=True)
-            else:
-                # Model co the tra loi ma khong trich dan duoc (vd "khong tim
-                # thay thong tin") -- khong de trong khong giai thich gi.
-                st.caption("Câu trả lời này không có trích dẫn cụ thể.")
-        except Exception:
-            logger.exception("Send request failed")
-            st.error(
-                "Có lỗi khi gọi server — repo có thể không tồn tại/không phải của bạn, hoặc phiên đăng nhập đã hết hạn."
-            )
+                render_answer(data["answer"])
+
+                # Lưu lượt này vào lịch sử HIỂN THỊ -- để lần render lại (vd
+                # người dùng gửi tiếp câu hỏi khác) vẫn thấy đủ các lượt
+                # trước đó, giống đang cuộn lên xem lại 1 khung chat thật.
+                st.session_state.chat_history.append({
+                    "question": question,
+                    "answer": data["answer"],
+                    "exhausted_budget": data.get("exhausted_budget"),
+                })
+            except Exception:
+                logger.exception("Send request failed")
+                st.error("Có lỗi khi gọi server — repo có thể không tồn tại/không phải của bạn, hoặc phiên đăng nhập đã hết hạn.")
