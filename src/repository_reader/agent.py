@@ -253,7 +253,7 @@ def _generate_with_retry(**kwargs):
     raise last_error
 
 
-def run(question: str, repo_id: int) -> dict:
+def run(question: str, repo_id: int, prior_turns: list | None = None) -> dict:
     """
     Chạy vòng lặp ReAct cho 1 câu hỏi, trả về dict:
         {"answer": str, "exhausted_budget": bool}
@@ -272,9 +272,21 @@ def run(question: str, repo_id: int) -> dict:
     # này — mỗi lượt Reasoning/Action/Observation được append vào đây để
     # model "nhớ" đã làm gì, vì mỗi lần generate_content() là stateless,
     # không tự giữ ngữ cảnh giữa các lần gọi.
-    contents = [
+    # Neu co lich su hoi-dap cu (prior_turns, truyen tu app.py qua
+    # conversation_id) -- prepend tung cap (user/model) TRUOC cau hoi moi,
+    # KHONG replay tool-call/observation cu, chi text Q&A thuan.
+    contents = []
+    if prior_turns:
+        for prior_turn in prior_turns:
+            contents.append(
+                types.Content(role="user", parts=[types.Part.from_text(text=prior_turn.question)])
+            )
+            contents.append(
+                types.Content(role="model", parts=[types.Part.from_text(text=prior_turn.answer)])
+            )
+    contents.append(
         types.Content(role="user", parts=[types.Part.from_text(text=question)])
-    ]
+    )
 
     # --- Track 4 mục 6: 1 root observation Langfuse bọc TOÀN BỘ 1 lần run() ---
     # as_type="agent" (không phải "span" chung) -- theo đúng best-practice
